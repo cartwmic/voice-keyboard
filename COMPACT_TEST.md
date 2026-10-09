@@ -32,6 +32,27 @@ Debug builds intentionally hide the upstream update controls: upstream release A
 update this separately signed package. Install future test APKs signed with the same test key
 over this test app. The debug signing key is only a development key, not a production identity.
 
+## Optional camera-space experiment
+
+After trying ordinary compact mode, enable **Use space beside cameras (experimental)** if you
+want to try the cover screen's camera band. On Android 11 or later, the IME requests permission
+to lay out into the cutout region and uses Android's reported camera bounding rectangles. It
+keeps a 4 dp margin from them and only places the single row alongside them when at least
+260 dp is free (wide Talk plus three 48 dp keys). Otherwise the row stays above the cameras.
+It never switches to two rows or shrinks targets. The setting defaults off. Disable it to return
+to ordinary system-safe layout. Android 10 and earlier retain the ordinary safe layout.
+
+Phone software can still limit the keyboard window independently of the host app's fullscreen
+setting. A camera rectangle may enclose both lenses, so space between lenses is not assumed
+usable. The keyboard deliberately does not use Android's fullscreen extracted-text editor,
+which would replace the host editor rather than merely extend the keyboard into the camera area.
+
+If the placement is unexpected, open settings and tap **Copy keyboard layout diagnostics**.
+This copies the latest local measurement: display, window/input bounds, cutout and navigation
+insets, window mode and placement reason. It contains no typed text, audio, provider address or
+API key and is not uploaded automatically. Share it with a screenshot of the cover screen if you
+want help adjusting the test. Physical camera clearance still requires testing on the Razr.
+
 ## Build and automated checks
 
 Use JDK 17 and Android SDK 34 with the repository's Gradle 8.5 wrapper:
@@ -56,3 +77,11 @@ and returning from settings after changing height. Verify that camera/rounded-co
 and gesture or 3-button navigation do not obscure keys at each height. Also check full-layout
 restoration, light/dark themes and large font settings. Automated layout tests do not establish
 physical camera clearance or validate the private homelab endpoint from this environment.
+
+## Validation of this test build
+
+Validated in the cloud build environment on 2026-10-09 with JDK 17, Android SDK 34 and Gradle 8.5:
+242 automated tests passed; debug APK assembly and Android lint passed. Lint reports zero errors
+and 69 warnings, including existing project warnings. The debug APK signature and separate
+application identity were verified. No physical Razr, microphone session, TalkBack session or
+private homelab request was tested here.

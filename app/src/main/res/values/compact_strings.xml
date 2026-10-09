@@ -3,6 +3,13 @@
     <!-- English fallback until this optional layout is translated. -->
     <string name="settings_compact_terminal_layout" translatable="false">Compact Terminal layout</string>
     <string name="settings_compact_terminal_hint" translatable="false">One row: switch keyboard, Talk, backspace and Enter. Other controls remain in the full layout. Long-press the keyboard-switch key to open settings. Changes save immediately.</string>
+    <string name="settings_compact_height_label" translatable="false">Compact height</string>
     <string name="settings_compact_height" translatable="false">Compact height: %1$d dp</string>
     <string name="settings_compact_height_hint" translatable="false">56–72 dp; default 64 dp. Turn off Compact Terminal layout to restore the full keyboard.</string>
+    <string name="settings_beside_cameras" translatable="false">Use space beside cameras (experimental)</string>
+    <string name="settings_beside_cameras_hint" translatable="false">Tries camera-free space when a wide Talk button and 48 dp keys fit. Otherwise the keyboard stays above the cameras. Your phone may restrict the available keyboard area.</string>
+    <string name="settings_copy_layout_diagnostics" translatable="false">Copy keyboard layout diagnostics</string>
+    <string name="settings_layout_diagnostics_label" translatable="false">Keyboard layout diagnostics</string>
+    <string name="settings_layout_diagnostics_copied" translatable="false">Keyboard layout diagnostics copied</string>
+    <string name="settings_layout_diagnostics_hint" translatable="false">Copies the last local layout snapshot for troubleshooting. No typed text, audio or API keys are included.</string>
 </resources>

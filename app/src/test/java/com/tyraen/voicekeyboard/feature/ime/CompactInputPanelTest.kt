@@ -21,10 +21,10 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class, qualifiers = "w320dp-h640dp-mdpi")
 class CompactInputPanelTest {
-    private fun panel(height: Int): Pair<ConstraintLayout, InputPanelController> {
+    private fun panel(height: Int, besideCameras: Boolean = false): Pair<ConstraintLayout, InputPanelController> {
         val context = ContextThemeWrapper(RuntimeEnvironment.getApplication(), R.style.Theme_VoiceKeyboard)
         val root = LayoutInflater.from(context).inflate(R.layout.input_panel, null) as ConstraintLayout
-        CompactInputPanel.apply(root, height)
+        CompactInputPanel.apply(root, height, besideCameras = besideCameras)
         return root to InputPanelController(root, compact = true).also { it.transitionTo(InputPhase.Ready) }
     }
 
@@ -36,13 +36,16 @@ class CompactInputPanelTest {
     }
 
     @Test fun `layout settings save immediately and clamp height`() {
-        val context = RuntimeEnvironment.getApplication<Application>()
-        KeyboardLayoutPreferences.persist(context, compact = true, heightDp = 999)
+        val context = RuntimeEnvironment.getApplication()
+        KeyboardLayoutPreferences.persist(context, compact = true, heightDp = 999, besideCameras = true)
         assertTrue(KeyboardLayoutPreferences.current(context).compact)
         assertEquals(72, KeyboardLayoutPreferences.current(context).heightDp)
         KeyboardLayoutPreferences.persist(context, compact = false, heightDp = -1)
         assertFalse(KeyboardLayoutPreferences.current(context).compact)
         assertEquals(56, KeyboardLayoutPreferences.current(context).heightDp)
+        assertTrue(KeyboardLayoutPreferences.current(context).besideCameras)
+        KeyboardLayoutPreferences.persist(context, compact = true, heightDp = 64, besideCameras = false)
+        assertFalse(KeyboardLayoutPreferences.current(context).besideCameras)
     }
 
     @Test fun `all phases and hidden controls preserve row height and touch targets`() {
@@ -81,12 +84,21 @@ class CompactInputPanelTest {
     @Test fun `cutout reserve adds safe padding without changing key height`() {
         val (root, _) = panel(64)
         ViewCompat.dispatchApplyWindowInsets(root, WindowInsetsCompat.Builder()
-            .setInsets(WindowInsetsCompat.Type.displayCutout(), Insets.of(8, 0, 12, 20)).build())
+            .setInsets(WindowInsetsCompat.Type.displayCutout(), Insets.of(8, 0, 12, 20))
+            .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, 34)).build())
         assertEquals(84, measure(root))
         assertEquals(12, root.paddingLeft)
         assertEquals(16, root.paddingRight)
         assertEquals(24, root.paddingBottom)
         assertEquals(56, root.findViewById<View>(R.id.btnMic).height)
+    }
+
+    @Test fun `experimental mode with no camera never adds navigation space twice`() {
+        val (root, _) = panel(64, besideCameras = true)
+        ViewCompat.dispatchApplyWindowInsets(root, WindowInsetsCompat.Builder()
+            .setInsets(WindowInsetsCompat.Type.navigationBars(), Insets.of(0, 0, 0, 34)).build())
+        assertEquals(64, measure(root))
+        assertEquals(4, root.paddingBottom)
     }
 
     @Test fun `compact mode keeps backspace and enter in their requested order`() {

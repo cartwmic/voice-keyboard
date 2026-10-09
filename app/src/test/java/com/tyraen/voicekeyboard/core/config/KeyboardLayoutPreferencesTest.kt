@@ -9,6 +9,7 @@ class KeyboardLayoutPreferencesTest {
     @Test fun `full keyboard is the default with a 64 dp compact height`() {
         val layout = KeyboardLayoutConfig()
         assertFalse(layout.compact)
+        assertFalse(layout.besideCameras)
         assertEquals(64, layout.heightDp)
     }
 

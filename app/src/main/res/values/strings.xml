@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Voice Keyboard</string>
+    <string name="app_name" translatable="false">Voice Keyboard</string>
     <string name="status_idle">Tap mic to record</string>
     <string name="status_recording">Recording\u2026</string>
     <string name="status_transcribing">Transcribing\u2026</string>
@@ -36,10 +36,10 @@
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
     <string name="settings_interface_language">Interface Language</string>
-    <string name="default_endpoint">https://api.groq.com/openai/v1/audio/transcriptions</string>
-    <string name="default_model">whisper-large-v3-turbo</string>
-    <string name="default_language">en</string>
-    <string name="default_prompt">Hello, how are you? I\'m doing well. This is a properly formatted sentence, with punctuation and capitalization.</string>
+    <string name="default_endpoint" translatable="false">https://api.groq.com/openai/v1/audio/transcriptions</string>
+    <string name="default_model" translatable="false">whisper-large-v3-turbo</string>
+    <string name="default_language" translatable="false">en</string>
+    <string name="default_prompt" translatable="false">Hello, how are you? I\'m doing well. This is a properly formatted sentence, with punctuation and capitalization.</string>
     <string name="update_available">Update Available</string>
     <string name="update_new_version">New version %s is available.</string>
     <string name="update_button">Update</string>

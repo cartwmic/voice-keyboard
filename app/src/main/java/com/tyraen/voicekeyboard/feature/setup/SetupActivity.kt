@@ -14,12 +14,14 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import com.tyraen.voicekeyboard.BuildConfig
 import com.tyraen.voicekeyboard.R
 import com.tyraen.voicekeyboard.app.ServiceLocator
 import com.tyraen.voicekeyboard.core.config.KeyboardLayoutPreferences
+import com.tyraen.voicekeyboard.core.config.KeyboardLayoutDiagnostics
 import com.tyraen.voicekeyboard.core.config.PreferenceStore
 import com.tyraen.voicekeyboard.core.config.ProviderPresets
 import com.tyraen.voicekeyboard.core.config.ThemeManager
@@ -49,9 +51,11 @@ class SetupActivity : AppCompatActivity() {
     private lateinit var spinnerTheme: Spinner
     private lateinit var spinnerLanguage: Spinner
     private lateinit var spinnerSttPreset: Spinner
-    private lateinit var switchCompactTerminalLayout: Switch
+    private lateinit var switchCompactTerminalLayout: SwitchCompat
+    private lateinit var switchBesideCameras: SwitchCompat
     private lateinit var seekCompactHeight: SeekBar
     private lateinit var txtCompactHeight: TextView
+    private lateinit var btnCopyLayoutDiagnostics: Button
     private lateinit var editApiKey: EditText
     private lateinit var editEndpoint: EditText
     private lateinit var txtEndpointWarning: TextView
@@ -151,8 +155,10 @@ class SetupActivity : AppCompatActivity() {
         spinnerLanguage = findViewById(R.id.spinnerLanguage)
         spinnerSttPreset = findViewById(R.id.spinnerSttPreset)
         switchCompactTerminalLayout = findViewById(R.id.switchCompactTerminalLayout)
+        switchBesideCameras = findViewById(R.id.switchBesideCameras)
         seekCompactHeight = findViewById(R.id.seekCompactHeight)
         txtCompactHeight = findViewById(R.id.txtCompactHeight)
+        btnCopyLayoutDiagnostics = findViewById(R.id.btnCopyLayoutDiagnostics)
         editApiKey = findViewById(R.id.editApiKey)
         editEndpoint = findViewById(R.id.editEndpoint)
         txtEndpointWarning = findViewById(R.id.txtEndpointWarning)
@@ -359,7 +365,22 @@ class SetupActivity : AppCompatActivity() {
         switchCompactTerminalLayout.setOnCheckedChangeListener { _, compact ->
             if (bindingCompactSwitch) return@setOnCheckedChangeListener
             seekCompactHeight.isEnabled = compact
+            switchBesideCameras.isEnabled = compact
             KeyboardLayoutPreferences.persist(this, compact, compactHeightDp())
+        }
+        switchBesideCameras.setOnCheckedChangeListener { _, besideCameras ->
+            if (bindingCompactSwitch) return@setOnCheckedChangeListener
+            KeyboardLayoutPreferences.persist(
+                this, switchCompactTerminalLayout.isChecked, compactHeightDp(), besideCameras
+            )
+        }
+        btnCopyLayoutDiagnostics.setOnClickListener {
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText(
+                getString(R.string.settings_layout_diagnostics_label),
+                KeyboardLayoutDiagnostics.read(this)
+            ))
+            Toast.makeText(this, R.string.settings_layout_diagnostics_copied, Toast.LENGTH_SHORT).show()
         }
         seekCompactHeight.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -386,9 +407,11 @@ class SetupActivity : AppCompatActivity() {
         val layout = KeyboardLayoutPreferences.current(this)
         bindingCompactSwitch = true
         switchCompactTerminalLayout.isChecked = layout.compact
+        switchBesideCameras.isChecked = layout.besideCameras
         bindingCompactSwitch = false
         seekCompactHeight.progress = layout.heightDp - KeyboardLayoutPreferences.MIN_HEIGHT_DP
         seekCompactHeight.isEnabled = layout.compact
+        switchBesideCameras.isEnabled = layout.compact
         updateCompactHeightLabel()
     }
 

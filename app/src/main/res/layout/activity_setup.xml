@@ -109,7 +109,7 @@
             android:layout_marginBottom="16dp" />
 
         <!-- Local keyboard layout: saved immediately, without validating provider settings. -->
-        <Switch
+        <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/switchCompactTerminalLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -130,6 +130,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:labelFor="@id/seekCompactHeight"
+            android:text="@string/settings_compact_height_label"
             android:textColor="@color/key_text"
             android:textSize="14sp" />
         <SeekBar
@@ -146,6 +147,38 @@
             android:text="@string/settings_compact_height_hint"
             android:textColor="@color/status_text"
             android:textSize="12sp"
+            android:layout_marginBottom="16dp" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switchBesideCameras"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:text="@string/settings_beside_cameras"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_beside_cameras_hint"
+            android:textColor="@color/status_text"
+            android:textSize="12sp"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="8dp" />
+        <Button
+            android:id="@+id/btnCopyLayoutDiagnostics"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_copy_layout_diagnostics"
+            android:textColor="@color/text_primary"
+            android:backgroundTint="@color/key_bg" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_layout_diagnostics_hint"
+            android:textColor="@color/status_text"
+            android:textSize="12sp"
+            android:layout_marginTop="4dp"
             android:layout_marginBottom="16dp" />
 
         <!-- API Key -->

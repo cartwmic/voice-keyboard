@@ -24,6 +24,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.tyraen.voicekeyboard.R
 import com.tyraen.voicekeyboard.app.ServiceLocator
+import com.tyraen.voicekeyboard.core.config.KeyboardLayoutDiagnostics
 import com.tyraen.voicekeyboard.core.config.KeyboardLayoutPreferences
 import com.tyraen.voicekeyboard.core.config.KeyboardLayoutConfig
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -91,7 +92,41 @@ class DictationInputMethod : InputMethodService() {
         val themedContext = ThemeManager.applyToContext(this)
         val view = LayoutInflater.from(themedContext).inflate(R.layout.input_panel, null)
         currentLayout = KeyboardLayoutPreferences.current(this)
-        if (currentLayout.compact) CompactInputPanel.apply(view as ConstraintLayout, currentLayout.heightDp)
+        val imeWindow = window.window
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            imeWindow?.attributes = imeWindow?.attributes?.apply {
+                layoutInDisplayCutoutMode = if (currentLayout.compact && currentLayout.besideCameras &&
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+                ) WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                else WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+            }
+        }
+        if (currentLayout.compact) CompactInputPanel.apply(
+            view as ConstraintLayout, currentLayout.heightDp,
+            besideCameras = currentLayout.besideCameras && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R,
+            onDiagnostics = { geometry ->
+                val decor = imeWindow?.decorView
+                val location = IntArray(2)
+                decor?.getLocationOnScreen(location)
+                KeyboardLayoutDiagnostics.save(this, buildString {
+                    appendLine("Voice Keyboard compact layout")
+                    appendLine("Android API: ${Build.VERSION.SDK_INT}; display: ${view.display?.displayId}")
+                    appendLine("Requested beside cameras: ${currentLayout.besideCameras}")
+                    appendLine("Cutout mode: ${if (Build.VERSION.SDK_INT >= 28) imeWindow?.attributes?.layoutInDisplayCutoutMode else "not supported"}")
+                    appendLine("IME fullscreen extracted editor: $isFullscreenMode")
+                    appendLine("Decor screen bounds: ${location[0]},${location[1]} ${decor?.width}x${decor?.height}")
+                    append(geometry)
+                })
+            },
+            onMissingCameraGeometry = {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    imeWindow?.attributes = imeWindow?.attributes?.apply {
+                        layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+                    }
+                    ViewCompat.requestApplyInsets(view)
+                }
+            }
+        )
         matchNavigationBarToPanel(themedContext)
 
         panel = InputPanelController(view, compact = currentLayout.compact)
