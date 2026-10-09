@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- English fallback until this optional layout is translated. -->
+    <string name="settings_compact_terminal_layout" translatable="false">Compact Terminal layout</string>
+    <string name="settings_compact_terminal_hint" translatable="false">One row: switch keyboard, Talk, backspace and Enter. Other controls remain in the full layout. Long-press the keyboard-switch key to open settings. Changes save immediately.</string>
+    <string name="settings_compact_height" translatable="false">Compact height: %1$d dp</string>
+    <string name="settings_compact_height_hint" translatable="false">56–72 dp; default 64 dp. Turn off Compact Terminal layout to restore the full keyboard.</string>
+</resources>

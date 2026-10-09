@@ -50,6 +50,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Side-by-side test install: never replace the upstream app or its saved providers.
+            applicationIdSuffix = ".compacttest"
+            versionNameSuffix = "-compact-test"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -71,6 +76,7 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    testOptions { unitTests.isIncludeAndroidResources = true }
     buildFeatures {
         buildConfig = true
     }
@@ -87,6 +93,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.12.2")
     // org.json is part of the Android platform but stubbed in JVM unit tests; bring the real impl
     // so we can test parked-recording (de)serialization off-device.
     testImplementation("org.json:json:20240303")

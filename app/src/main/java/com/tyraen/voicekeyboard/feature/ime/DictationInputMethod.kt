@@ -24,6 +24,9 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.tyraen.voicekeyboard.R
 import com.tyraen.voicekeyboard.app.ServiceLocator
+import com.tyraen.voicekeyboard.core.config.KeyboardLayoutPreferences
+import com.tyraen.voicekeyboard.core.config.KeyboardLayoutConfig
+import androidx.constraintlayout.widget.ConstraintLayout
 import com.tyraen.voicekeyboard.core.config.ThemeManager
 import com.tyraen.voicekeyboard.core.locale.InterfaceLanguageManager
 import com.tyraen.voicekeyboard.core.locale.TranscriptionLocale
@@ -55,6 +58,7 @@ class DictationInputMethod : InputMethodService() {
     private lateinit var orchestrator: InputOrchestrator
     private lateinit var keystrokes: KeystrokeDispatcher
     private var currentTheme: String = ""
+    private var currentLayout = KeyboardLayoutConfig()
     private var clipboardListener: ClipboardManager.OnPrimaryClipChangedListener? = null
     private var keyboardVisible = false
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -82,12 +86,16 @@ class DictationInputMethod : InputMethodService() {
             orchestrator.destroy()
         }
 
+        if (::keystrokes.isInitialized) keystrokes.stopBackspaceRepeat()
         currentTheme = ThemeManager.current(this)
         val themedContext = ThemeManager.applyToContext(this)
         val view = LayoutInflater.from(themedContext).inflate(R.layout.input_panel, null)
+        currentLayout = KeyboardLayoutPreferences.current(this)
+        if (currentLayout.compact) CompactInputPanel.apply(view as ConstraintLayout, currentLayout.heightDp)
         matchNavigationBarToPanel(themedContext)
 
-        panel = InputPanelController(view)
+        panel = InputPanelController(view, compact = currentLayout.compact)
+        panel.transitionTo(InputPhase.Ready)
         keystrokes = KeystrokeDispatcher { currentInputConnection }
 
         orchestrator = InputOrchestrator(
@@ -136,6 +144,7 @@ class DictationInputMethod : InputMethodService() {
     /** Focus moved to another field (or the keyboard opened on one): follow what it asks for. */
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        if (::keystrokes.isInitialized) keystrokes.stopBackspaceRepeat()
         applyFieldToPanel(info)
         // A recording started in the previous field (a login's user name, say) stops when focus
         // moves into a password field, so the mic is not left open there. What was said is still
@@ -184,9 +193,8 @@ class DictationInputMethod : InputMethodService() {
 
         // Recreate view if theme changed in settings
         val newTheme = ThemeManager.current(this)
-        if (newTheme != currentTheme) {
+        if (newTheme != currentTheme || KeyboardLayoutPreferences.current(this) != currentLayout) {
             setInputView(createInputView())
-            return
         }
 
         if (::orchestrator.isInitialized) {
@@ -196,9 +204,15 @@ class DictationInputMethod : InputMethodService() {
         refreshClipboardBar()
     }
 
+    override fun onFinishInputView(finishingInput: Boolean) {
+        if (::keystrokes.isInitialized) keystrokes.stopBackspaceRepeat()
+        super.onFinishInputView(finishingInput)
+    }
+
     override fun onWindowHidden() {
         super.onWindowHidden()
         keyboardVisible = false
+        if (::keystrokes.isInitialized) keystrokes.stopBackspaceRepeat()
         lastDictationInserted = false
         mainHandler.removeCallbacks(returnCheck)
         mainHandler.removeCallbacks(switchCheck)
@@ -316,6 +330,7 @@ class DictationInputMethod : InputMethodService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (::keystrokes.isInitialized) keystrokes.stopBackspaceRepeat()
         mainHandler.removeCallbacks(returnCheck)
         mainHandler.removeCallbacks(switchCheck)
         clipboardListener?.let {
@@ -364,6 +379,7 @@ class DictationInputMethod : InputMethodService() {
             true
         }
 
+        btnBackspace.setOnClickListener { keystrokes.deleteBack() }
         btnBackspace.setOnTouchListener { v, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
@@ -412,7 +428,20 @@ class DictationInputMethod : InputMethodService() {
             if (!switchToPreviousKeyboard(hideIfItFails = true)) requestHideSelf(0)
         }
         // Long-press names the key, like the mode toggles (see bindToggle).
-        ViewCompat.setTooltipText(btnPreviousKeyboard, btnPreviousKeyboard.contentDescription)
+        if (currentLayout.compact) {
+            btnPreviousKeyboard.contentDescription = getString(R.string.compact_switch_settings)
+            btnPreviousKeyboard.setOnLongClickListener { openSettings(); true }
+            btnMic.setOnLongClickListener {
+                if (panel.currentPhase is InputPhase.Capturing) {
+                    orchestrator.handleAction(InputAction.CancelOperation)
+                } else {
+                    orchestrator.retryFailed()
+                }
+                true
+            }
+        } else {
+            ViewCompat.setTooltipText(btnPreviousKeyboard, btnPreviousKeyboard.contentDescription)
+        }
 
         btnSend.setOnClickListener {
             val enter = enterFor(currentInputEditorInfo)

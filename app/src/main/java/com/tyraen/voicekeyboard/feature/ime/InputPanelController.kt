@@ -14,7 +14,7 @@ import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import com.tyraen.voicekeyboard.R
 import com.tyraen.voicekeyboard.core.locale.TranscriptionLocale
 
-class InputPanelController(rootView: View) {
+class InputPanelController(rootView: View, private val compact: Boolean = false) {
 
     /** What a transient notice is for, so a check can ask for its own notice and no other. */
     enum class Notice { DISCARD_CONFIRM, PASSWORD_FIELD }
@@ -54,6 +54,7 @@ class InputPanelController(rootView: View) {
     var currentPhase: InputPhase = InputPhase.Ready
         private set
 
+    private var currentFailedCount: Int = 0
     private var currentQueueCount: Int = 0
     private var currentProcessingPhase: ProcessingQueue.ProcessingPhase = ProcessingQueue.ProcessingPhase.TRANSCRIBING
 
@@ -62,7 +63,7 @@ class InputPanelController(rootView: View) {
         when (phase) {
             is InputPhase.Ready -> {
                 applyMicAlpha()
-                btnMic.setBackgroundResource(R.drawable.mic_button_bg)
+                btnMic.setBackgroundResource(if (compact) R.drawable.compact_mic_idle else R.drawable.mic_button_bg)
                 btnMic.visibility = View.VISIBLE
                 btnCancel.visibility = View.GONE
                 animator.haltPulse()
@@ -72,12 +73,13 @@ class InputPanelController(rootView: View) {
             is InputPhase.Capturing -> {
                 applyMicAlpha()
                 clearNotice()
-                statusText.setText(R.string.status_recording)
-                btnMic.setBackgroundResource(R.drawable.mic_button_recording)
+                statusText.setText(if (compact) R.string.compact_stop else R.string.status_recording)
+                if (compact) btnMic.contentDescription = statusText.context.getString(R.string.compact_stop_description)
+                btnMic.setBackgroundResource(if (compact) R.drawable.compact_mic_recording else R.drawable.mic_button_recording)
                 btnMic.visibility = View.VISIBLE
                 btnCancel.visibility = View.VISIBLE
                 progressBar.visibility = View.GONE
-                animator.beginPulse()
+                if (!compact) animator.beginPulse()
             }
             is InputPhase.Failed -> {
                 displayError(phase.reasonRes)
@@ -102,6 +104,8 @@ class InputPanelController(rootView: View) {
 
     /** Show/hide the "resend failed recordings" button and its count badge. */
     fun updateFailedCount(count: Int) {
+        currentFailedCount = count
+        if (compact && currentPhase is InputPhase.Ready) applyQueueState()
         if (count > 0) {
             retryBadge.text = count.toString()
             retryFrame.visibility = View.VISIBLE
@@ -122,14 +126,25 @@ class InputPanelController(rootView: View) {
         if (currentQueueCount > 0) {
             when (currentProcessingPhase) {
                 ProcessingQueue.ProcessingPhase.TRANSCRIBING ->
-                    statusText.setText(R.string.status_transcribing)
+                    statusText.setText(if (compact) R.string.compact_working else R.string.status_transcribing)
                 ProcessingQueue.ProcessingPhase.POST_PROCESSING ->
-                    statusText.setText(R.string.status_postprocessing)
+                    statusText.setText(if (compact) R.string.compact_working else R.string.status_postprocessing)
             }
             progressBar.visibility = View.VISIBLE
         } else {
-            statusText.setText(if (voiceBlocked) R.string.status_password_field else R.string.status_idle)
+            statusText.setText(when {
+                voiceBlocked -> R.string.status_password_field
+                compact && currentFailedCount > 0 -> R.string.compact_retry
+                compact -> R.string.compact_talk
+                else -> R.string.status_idle
+            })
             progressBar.visibility = View.GONE
+        }
+        if (compact) {
+            btnMic.contentDescription = if (voiceBlocked) statusText.context.getString(R.string.status_password_field)
+            else "${statusText.text}. " + statusText.context.getString(
+                if (currentFailedCount > 0) R.string.compact_retry_description else R.string.compact_talk_description
+            )
         }
     }
 
@@ -183,6 +198,11 @@ class InputPanelController(rootView: View) {
         clearNotice()
         val context = statusText.context
         statusText.text = context.getString(R.string.status_error, context.getString(reasonRes))
+        if (compact) {
+            animator.haltPulse()
+            btnMic.contentDescription = statusText.text
+            Toast.makeText(context, statusText.text, Toast.LENGTH_LONG).show()
+        }
     }
 
     private var noticeReset: Runnable? = null
@@ -203,6 +223,7 @@ class InputPanelController(rootView: View) {
     fun showNotice(text: String, durationMs: Long = 4000L, kind: Notice? = null) {
         clearNotice()
         statusText.text = text
+        if (compact) Toast.makeText(statusText.context, text, Toast.LENGTH_LONG).show()
         val reset = Runnable {
             noticeReset = null
             noticeKind = null
@@ -245,6 +266,7 @@ class InputPanelController(rootView: View) {
     }
 
     fun updateClipboard(text: String?) {
+        if (compact) { clipboardBar.visibility = View.GONE; return }
         if (text.isNullOrBlank()) {
             clipboardBar.visibility = View.GONE
         } else {

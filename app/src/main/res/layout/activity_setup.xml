@@ -108,6 +108,46 @@
             android:backgroundTint="@color/mic_idle"
             android:layout_marginBottom="16dp" />
 
+        <!-- Local keyboard layout: saved immediately, without validating provider settings. -->
+        <Switch
+            android:id="@+id/switchCompactTerminalLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="48dp"
+            android:text="@string/settings_compact_terminal_layout"
+            android:textColor="@color/text_primary"
+            android:textSize="14sp" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_compact_terminal_hint"
+            android:textColor="@color/status_text"
+            android:textSize="12sp"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="12dp" />
+        <TextView
+            android:id="@+id/txtCompactHeight"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:labelFor="@id/seekCompactHeight"
+            android:textColor="@color/key_text"
+            android:textSize="14sp" />
+        <SeekBar
+            android:id="@+id/seekCompactHeight"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:max="16"
+            android:progress="8"
+            android:progressTint="@color/mic_idle"
+            android:thumbTint="@color/mic_idle" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/settings_compact_height_hint"
+            android:textColor="@color/status_text"
+            android:textSize="12sp"
+            android:layout_marginBottom="16dp" />
+
         <!-- API Key -->
         <TextView
             android:layout_width="wrap_content"

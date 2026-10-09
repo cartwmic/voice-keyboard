@@ -16,8 +16,10 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
+import com.tyraen.voicekeyboard.BuildConfig
 import com.tyraen.voicekeyboard.R
 import com.tyraen.voicekeyboard.app.ServiceLocator
+import com.tyraen.voicekeyboard.core.config.KeyboardLayoutPreferences
 import com.tyraen.voicekeyboard.core.config.PreferenceStore
 import com.tyraen.voicekeyboard.core.config.ProviderPresets
 import com.tyraen.voicekeyboard.core.config.ThemeManager
@@ -47,6 +49,9 @@ class SetupActivity : AppCompatActivity() {
     private lateinit var spinnerTheme: Spinner
     private lateinit var spinnerLanguage: Spinner
     private lateinit var spinnerSttPreset: Spinner
+    private lateinit var switchCompactTerminalLayout: Switch
+    private lateinit var seekCompactHeight: SeekBar
+    private lateinit var txtCompactHeight: TextView
     private lateinit var editApiKey: EditText
     private lateinit var editEndpoint: EditText
     private lateinit var txtEndpointWarning: TextView
@@ -94,6 +99,7 @@ class SetupActivity : AppCompatActivity() {
     /** True while the code sets the update switch, so its listener ignores that echo. */
     private var bindingUpdateSwitch = false
     private var bindingReturnSwitch = false
+    private var bindingCompactSwitch = false
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(InterfaceLanguageManager.applyTo(newBase))
@@ -107,6 +113,7 @@ class SetupActivity : AppCompatActivity() {
         setupThemeSpinner()
         setupLanguageSpinner()
         setupPresetSpinner()
+        setupCompactLayout()
         setupActions()
         loadCurrentPreferences()
         showMicDisclosureIfNeeded()
@@ -143,6 +150,9 @@ class SetupActivity : AppCompatActivity() {
         spinnerTheme = findViewById(R.id.spinnerTheme)
         spinnerLanguage = findViewById(R.id.spinnerLanguage)
         spinnerSttPreset = findViewById(R.id.spinnerSttPreset)
+        switchCompactTerminalLayout = findViewById(R.id.switchCompactTerminalLayout)
+        seekCompactHeight = findViewById(R.id.seekCompactHeight)
+        txtCompactHeight = findViewById(R.id.txtCompactHeight)
         editApiKey = findViewById(R.id.editApiKey)
         editEndpoint = findViewById(R.id.editEndpoint)
         txtEndpointWarning = findViewById(R.id.txtEndpointWarning)
@@ -232,6 +242,11 @@ class SetupActivity : AppCompatActivity() {
         }
 
         btnCheckUpdate.setOnClickListener { checkForUpdates(showUpToDate = true) }
+        // Upstream APKs cannot update the separately signed, side-by-side test application.
+        if (BuildConfig.DEBUG) {
+            btnCheckUpdate.visibility = View.GONE
+            switchUpdateCheck.visibility = View.GONE
+        }
 
         // Not gated on isPressed: that is false for TalkBack, Switch Access and a hardware
         // keyboard, which silently dropped the change and left no way to revoke consent.
@@ -339,6 +354,44 @@ class SetupActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupCompactLayout() {
+        seekCompactHeight.max = KeyboardLayoutPreferences.MAX_HEIGHT_DP - KeyboardLayoutPreferences.MIN_HEIGHT_DP
+        switchCompactTerminalLayout.setOnCheckedChangeListener { _, compact ->
+            if (bindingCompactSwitch) return@setOnCheckedChangeListener
+            seekCompactHeight.isEnabled = compact
+            KeyboardLayoutPreferences.persist(this, compact, compactHeightDp())
+        }
+        seekCompactHeight.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                updateCompactHeightLabel()
+                if (fromUser) {
+                    KeyboardLayoutPreferences.persist(
+                        this@SetupActivity, switchCompactTerminalLayout.isChecked, compactHeightDp()
+                    )
+                }
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+    }
+
+    private fun compactHeightDp(): Int = KeyboardLayoutPreferences.MIN_HEIGHT_DP + seekCompactHeight.progress
+
+    private fun updateCompactHeightLabel() {
+        txtCompactHeight.text = getString(R.string.settings_compact_height, compactHeightDp())
+    }
+
+    private fun loadKeyboardLayoutPreferences() {
+        val layout = KeyboardLayoutPreferences.current(this)
+        bindingCompactSwitch = true
+        switchCompactTerminalLayout.isChecked = layout.compact
+        bindingCompactSwitch = false
+        seekCompactHeight.progress = layout.heightDp - KeyboardLayoutPreferences.MIN_HEIGHT_DP
+        seekCompactHeight.isEnabled = layout.compact
+        updateCompactHeightLabel()
+    }
+
     /**
      * "Custom" plus the known speech-to-text providers. Picking one fills the address and model;
      * editing the address by hand moves the spinner back to whatever matches, or to "Custom".
@@ -378,6 +431,7 @@ class SetupActivity : AppCompatActivity() {
     }
 
     private fun loadCurrentPreferences() {
+        loadKeyboardLayoutPreferences()
         scope.launch {
             val p = preferenceStore.load()
             editApiKey.setText(p.apiKey)
@@ -571,6 +625,7 @@ class SetupActivity : AppCompatActivity() {
      * repeats the disclosure before anything is downloaded.
      */
     private fun resolveUpdateConsent() {
+        if (BuildConfig.DEBUG) return
         scope.launch {
             when {
                 preferenceStore.isUpdateCheckEnabled() -> checkForUpdates()
@@ -623,6 +678,7 @@ class SetupActivity : AppCompatActivity() {
     }
 
     private fun checkForUpdates(showUpToDate: Boolean = false) {
+        if (BuildConfig.DEBUG) return
         scope.launch {
             releaseChecker.checkForUpdate(this@SetupActivity, showUpToDate)
         }

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="compact_talk" translatable="false">Talk</string>
+    <string name="compact_stop" translatable="false">Stop</string>
+    <string name="compact_working" translatable="false">Working</string>
+    <string name="compact_retry" translatable="false">Hold to retry</string>
+    <string name="compact_talk_description" translatable="false">Record. You can record again while transcription is working.</string>
+    <string name="compact_stop_description" translatable="false">Stop recording. Hold to cancel.</string>
+    <string name="compact_retry_description" translatable="false">Record. Hold to retry saved recordings.</string>
+    <string name="compact_switch_settings" translatable="false">Previous keyboard. Hold to open settings.</string>
+</resources>
