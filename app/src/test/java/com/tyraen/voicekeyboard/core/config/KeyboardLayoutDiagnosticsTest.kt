@@ -109,7 +109,7 @@ class KeyboardLayoutDiagnosticsTest {
 
         val report = KeyboardLayoutDiagnostics.read(context)
         assertTrue(report.contains("Keyboard visible: false"))
-        assertTrue(report.contains("No visible keyboard snapshot yet"))
+        assertTrue(report.contains("No controls-visible frame was recorded"))
         assertFalse(report.contains("Last visible keyboard snapshot"))
     }
 
@@ -118,7 +118,7 @@ class KeyboardLayoutDiagnosticsTest {
 
         val report = KeyboardLayoutDiagnostics.read(context)
         assertTrue(report.contains("Current settings (read now): compact=true; heightDp=72; besideCameras=true"))
-        assertTrue(report.contains("No compact keyboard measurement yet"))
+        assertTrue(report.contains("No geometry snapshot was captured"))
         assertFalse(report.contains("Latest layout event"))
     }
 
@@ -141,6 +141,28 @@ class KeyboardLayoutDiagnosticsTest {
         val report = KeyboardLayoutDiagnostics.read(context)
         assertTrue(report.contains("Settings at capture: compact=true; heightDp=64; besideCameras=true"))
         assertTrue(report.contains("Settings changed since this snapshot"))
+    }
+
+    @Test fun `lifecycle checkpoint is durable without geometry and survives a different context`() {
+        val context = RuntimeEnvironment.getApplication()
+        assertTrue(KeyboardLayoutDiagnostics.recordLifecycle(context, "input_view_created", "Input view exists: true"))
+        val file = java.io.File(context.applicationInfo.dataDir, "shared_prefs/keyboard_layout_diagnostics.xml")
+        assertTrue(file.exists())
+        assertTrue(file.readText().contains("input_view_created"))
+        val otherContext = context.createConfigurationContext(android.content.res.Configuration())
+        val report = KeyboardLayoutDiagnostics.read(otherContext)
+        assertTrue(report.contains("Event: input_view_created"))
+        assertTrue(report.contains("No geometry snapshot was captured"))
+        assertFalse(report.contains("Open the compact keyboard"))
+    }
+
+    @Test fun `lifecycle history stays bounded and retains newest events`() {
+        val context = RuntimeEnvironment.getApplication()
+        repeat(12) { KeyboardLayoutDiagnostics.recordLifecycle(context, "event_$it", "safe layout metadata") }
+        val report = KeyboardLayoutDiagnostics.read(context)
+        assertFalse(report.contains("Event: event_3\n"))
+        assertTrue(report.contains("Event: event_4\n"))
+        assertTrue(report.contains("Event: event_11\n"))
     }
 
 }

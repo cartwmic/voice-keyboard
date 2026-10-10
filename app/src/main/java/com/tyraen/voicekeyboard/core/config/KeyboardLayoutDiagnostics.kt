@@ -1,7 +1,9 @@
 package com.tyraen.voicekeyboard.core.config
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
+import com.tyraen.voicekeyboard.BuildConfig
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -12,6 +14,38 @@ object KeyboardLayoutDiagnostics {
     private const val PREFS = "keyboard_layout_diagnostics"
     private const val LATEST = "latest"
     private const val LAST_VISIBLE = "last_visible"
+    private const val LIFECYCLE_HISTORY = "lifecycle_history"
+    private const val EVENT_SEPARATOR = "\n---\n"
+
+    private fun preferences(context: Context) =
+        context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    /** Rare service boundaries are durable checkpoints, even if no view/inset callback arrives. */
+    @SuppressLint("ApplySharedPref")
+    fun recordLifecycle(
+        context: Context,
+        event: String,
+        details: String,
+        layout: KeyboardLayoutConfig = KeyboardLayoutPreferences.current(context)
+    ): Boolean {
+        val prefs = preferences(context)
+        val entry = buildString {
+            appendLine("Captured UTC: ${utc(System.currentTimeMillis())}")
+            appendLine("Producer build: ${BuildConfig.VERSION_NAME}; package: ${context.packageName}")
+            appendLine("Event: $event")
+            appendLine("Bound layout: ${layout.description()}")
+            append(details.trimEnd())
+        }
+        val history = (prefs.getString(LIFECYCLE_HISTORY, "").orEmpty()
+            .split(EVENT_SEPARATOR).filter { it.isNotBlank() } + entry).takeLast(8)
+        // commit also waits for pending apply writes to this preferences file. These infrequent
+        // checkpoints preserve the latest geometry before settings/IME handoff or service death.
+        return prefs.edit().putString(LIFECYCLE_HISTORY, history.joinToString(EVENT_SEPARATOR)).commit()
+    }
+
+    private fun utc(timeMs: Long): String = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }.format(Date(timeMs))
 
     fun save(
         context: Context,
@@ -25,7 +59,7 @@ object KeyboardLayoutDiagnostics {
             visible = visible,
             layout = layout
         )
-        val editor = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        val editor = preferences(context).edit()
         editor.putSnapshot(LATEST, snapshot)
         // Hiding the IME or opening settings can trigger another geometry callback. Keep the
         // useful visible measurement instead of replacing it with the hidden-window bounds.
@@ -34,30 +68,35 @@ object KeyboardLayoutDiagnostics {
     }
 
     fun read(context: Context): String {
-        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val prefs = preferences(context)
         val current = KeyboardLayoutPreferences.current(context)
         val latest = prefs.snapshot(LATEST)
         val lastVisible = prefs.snapshot(LAST_VISIBLE)
         return buildString {
             appendLine("Keyboard layout diagnostics (local snapshots)")
+            appendLine("Reader build: ${BuildConfig.VERSION_NAME}; package: ${context.packageName}")
             appendLine("Current settings (read now): ${current.description()}")
             appendLine("Snapshots describe a previously captured layout, not a live measurement.")
             appendLine()
             if (latest == null) {
-                append("No compact keyboard measurement yet. Open the compact keyboard, then copy this report again.")
-                return@buildString
+                appendLine("No geometry snapshot was captured; lifecycle and build details are still available.")
+            } else {
+                appendSnapshot("Latest layout event", latest, current)
+                // Keep a hidden/unmeasured latest event: it is useful evidence, not 'no diagnostics'.
+                if (latest.visible != true && lastVisible != null) {
+                    appendLine()
+                    appendLine()
+                    appendSnapshot("Last visible keyboard snapshot", lastVisible, current)
+                } else if (latest.visible == false) {
+                    appendLine()
+                    appendLine("No controls-visible frame was recorded; the latest event above remains available.")
+                }
             }
-            appendSnapshot("Latest layout event", latest, current)
-            // A visible latest event already contains the same measurement; show it only once.
-            if (latest.visible != true && lastVisible != null) {
-                appendLine()
-                appendLine()
-                appendSnapshot("Last visible keyboard snapshot", lastVisible, current)
-            } else if (latest.visible == false) {
-                appendLine()
-                appendLine()
-                append("No visible keyboard snapshot yet. Open the keyboard, then copy this report again.")
-            }
+            appendLine()
+            appendLine()
+            appendLine("IME lifecycle checkpoints (most recent 8)")
+            append(prefs.getString(LIFECYCLE_HISTORY, null)
+                ?: "No IME lifecycle checkpoint has been recorded by this build. Geometry and reader context, if present above, remain available.")
         }
     }
 
@@ -98,9 +137,7 @@ object KeyboardLayoutDiagnostics {
         appendLine(title)
         val capturedAt = snapshot.capturedAtMs
         if (capturedAt != null) {
-            val utc = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
-                timeZone = TimeZone.getTimeZone("UTC")
-            }.format(Date(capturedAt))
+            val utc = utc(capturedAt)
             appendLine("Captured UTC: $utc")
             appendLine("Captured epoch ms: $capturedAt")
         } else {
@@ -113,7 +150,7 @@ object KeyboardLayoutDiagnostics {
         } else {
             appendLine("Settings at capture: ${snapshot.layout.description()}")
             if (snapshot.layout != current) {
-                appendLine("Settings changed since this snapshot. Open the keyboard to capture the new layout.")
+                appendLine("Settings changed since this snapshot. Captured and current settings are shown separately.")
             }
         }
         append(snapshot.report.trimEnd())

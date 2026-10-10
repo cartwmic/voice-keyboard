@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- English fallback until this optional layout is translated. -->
+    <string name="settings_installed_test_build" translatable="false">Test build %1$s (%2$d)</string>
+    <string name="settings_installed_build" translatable="false">Build %1$s (%2$d)</string>
+    <string name="settings_build_version_unknown" translatable="false">unknown version</string>
+    <string name="settings_installed_build_unavailable" translatable="false">Build %1$s (%2$d), compiled fallback; installed version unavailable</string>
     <string name="settings_compact_terminal_layout" translatable="false">Compact Terminal layout</string>
     <string name="settings_compact_terminal_hint" translatable="false">One row: switch keyboard, Talk, backspace and Enter. Other controls remain in the full layout. Long-press the keyboard-switch key to open settings. Changes save immediately.</string>
     <string name="settings_compact_height_label" translatable="false">Compact height</string>
@@ -11,5 +15,5 @@
     <string name="settings_copy_layout_diagnostics" translatable="false">Copy keyboard layout diagnostics</string>
     <string name="settings_layout_diagnostics_label" translatable="false">Keyboard layout diagnostics</string>
     <string name="settings_layout_diagnostics_copied" translatable="false">Keyboard layout diagnostics copied</string>
-    <string name="settings_layout_diagnostics_hint" translatable="false">Copies the last local layout snapshot for troubleshooting. No typed text, audio or API keys are included.</string>
+    <string name="settings_layout_diagnostics_hint" translatable="false">Copies the installed build, selected keyboard and local layout snapshots for troubleshooting. No typed text, audio or API keys are included.</string>
 </resources>

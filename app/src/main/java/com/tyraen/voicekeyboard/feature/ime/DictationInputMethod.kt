@@ -61,6 +61,7 @@ class DictationInputMethod : InputMethodService() {
     private var currentTheme: String = ""
     private var currentLayout = KeyboardLayoutConfig()
     private var compactSession: CompactInputPanelSession? = null
+    private var inputRoot: View? = null
     private var clipboardListener: ClipboardManager.OnPrimaryClipChangedListener? = null
     private var keyboardVisible = false
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -95,6 +96,7 @@ class DictationInputMethod : InputMethodService() {
         val themedContext = ThemeManager.applyToContext(this)
         val view = LayoutInflater.from(themedContext).inflate(R.layout.input_panel, null)
         currentLayout = KeyboardLayoutPreferences.current(this)
+        inputRoot = view
         val layoutForView = currentLayout
         val imeWindow = window.window
         // Start from the safe window. The visible compact session owns any camera-space probe.
@@ -176,12 +178,19 @@ class DictationInputMethod : InputMethodService() {
         wireControls(view)
         applyFieldToPanel(currentInputEditorInfo)
         if (keyboardVisible) compactSession?.onShown()
+        captureLayoutCheckpoint("input_view_created")
         return view
     }
 
     /** Focus moved to another field (or the keyboard opened on one): follow what it asks for. */
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        // Android also identifies a shown input view through this callback. Do not depend only
+        // on onWindowShown ordering for the compact session or for diagnostic capture.
+        keyboardVisible = true
+        compactSession?.onShown()
+        if (::orchestrator.isInitialized) orchestrator.viewVisible = true
+        captureLayoutCheckpoint("input_view_started")
         if (::keystrokes.isInitialized) keystrokes.stopBackspaceRepeat()
         applyFieldToPanel(info)
         // A recording started in the previous field (a login's user name, say) stops when focus
@@ -241,10 +250,12 @@ class DictationInputMethod : InputMethodService() {
             orchestrator.reloadAndAutoStart()
         }
         refreshClipboardBar()
+        captureLayoutCheckpoint("window_shown")
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
         if (::keystrokes.isInitialized) keystrokes.stopBackspaceRepeat()
+        captureLayoutCheckpoint("input_view_finished")
         super.onFinishInputView(finishingInput)
     }
 
@@ -252,6 +263,7 @@ class DictationInputMethod : InputMethodService() {
         super.onWindowHidden()
         keyboardVisible = false
         compactSession?.onHidden()
+        captureLayoutCheckpoint("window_hidden")
         if (::keystrokes.isInitialized) keystrokes.stopBackspaceRepeat()
         lastDictationInserted = false
         mainHandler.removeCallbacks(returnCheck)
@@ -259,6 +271,28 @@ class DictationInputMethod : InputMethodService() {
         if (::orchestrator.isInitialized) {
             orchestrator.viewVisible = false
             orchestrator.gracefulShutdown()
+        }
+    }
+
+    /** Captures only layout facts, independently of geometry availability or view callbacks. */
+    private fun captureLayoutCheckpoint(event: String) {
+        val root = inputRoot
+        val screen = IntArray(2)
+        root?.getLocationOnScreen(screen)
+        val insets = root?.let(ViewCompat::getRootWindowInsets)
+        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+            window.window?.attributes?.layoutInDisplayCutoutMode?.toString() ?: "unavailable"
+        else "unsupported"
+        val details = buildString {
+            appendLine("IME service shown flag: $keyboardVisible; compact session exists: ${compactSession != null}")
+            appendLine("Input view exists: ${root != null}; attached: ${root?.isAttachedToWindow}; display: ${root?.display?.displayId}")
+            appendLine("Input screen bounds: ${screen[0]},${screen[1]} ${root?.width ?: 0}x${root?.height ?: 0}")
+            appendLine("Root insets available: ${insets != null}; cutout rectangles (window): ${insets?.displayCutout?.boundingRects.orEmpty()}")
+            appendLine("Current requested cutout mode: $mode (requested attribute, not proof of granted bounds)")
+            append("No editor content, audio or provider settings are captured.")
+        }
+        if (!KeyboardLayoutDiagnostics.recordLifecycle(this, event, details, currentLayout)) {
+            DiagnosticLog.record(TAG, "Layout diagnostic checkpoint could not be persisted")
         }
     }
 
@@ -273,6 +307,7 @@ class DictationInputMethod : InputMethodService() {
     }
 
     private fun openSettings() {
+        captureLayoutCheckpoint("settings_open_requested")
         // SINGLE_TOP reuses a settings screen that is already open instead of stacking a second
         // one on top of it.
         startActivity(Intent(this, SetupActivity::class.java).apply {
@@ -374,6 +409,8 @@ class DictationInputMethod : InputMethodService() {
         keyboardVisible = false
         compactSession?.dispose()
         compactSession = null
+        captureLayoutCheckpoint("service_destroyed")
+        inputRoot = null
         super.onDestroy()
         if (::keystrokes.isInitialized) keystrokes.stopBackspaceRepeat()
         mainHandler.removeCallbacks(returnCheck)

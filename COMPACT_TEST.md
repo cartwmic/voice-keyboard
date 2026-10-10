@@ -112,3 +112,34 @@ and lint passed (0 errors; 72 warnings, with no warnings in the new repair code)
 package version 59 and the unchanged signing certificate were verified. Physical Razr
 behavior remains a device test; this update fixes a confirmed timing defect without
 claiming that it resolves every camera-area restriction.
+
+## Test update 3: diagnostics available independently of view callbacks
+
+Version `1.9.7-compact-test3` / code 60 uses the same test package and signing key. It updates the
+existing test app in place. The installed version and code are now shown near the top of settings
+and included in copied diagnostics, along with the IME selected at copy time (which need not be
+the keyboard that produced an earlier snapshot).
+
+Diagnostics now checkpoint directly when the IME creates/starts/shows/finishes/hides its input
+view, opens settings, or is destroyed. These bounded, synchronous service-boundary checkpoints
+persist independently of camera/inset callbacks and also flush pending geometry writes before
+handoff. Frequent geometry updates remain asynchronous. The report preserves available events
+and clearly distinguishes missing geometry from a missing visible frame, without telling the
+user to repeat a step they may already have performed. No input text, audio, endpoint or API key
+is captured.
+
+A real-service regression test reproduced the previous empty-report path after input-view
+creation with no later view/show/inset callbacks. Other tested show/hide paths already produced
+reports, so this does not establish the exact callback sequence on the user's Razr. The new tests
+exercise the actual DictationApp, DictationInputMethod and settings Copy button/clipboard, rather
+than injecting a prepared report. A full-framework start/show test supplies Robolectric's missing
+DisplayArea setup but does not replace the application's callbacks. Persistence is also checked
+against the on-disk preferences file and a second context.
+
+Update 3 validation (2026-10-10): 294/294 automated tests in 26 suites passed,
+including all 7 real-service-to-settings clipboard tests and 11 diagnostic-storage tests.
+APK assembly and lint passed (0 errors; 74 warnings). The net two-warning increase
+comes from three dependency-update notices on unchanged dependencies, minus one removed
+text-concatenation warning; no new diagnostic/lifecycle/accessibility warning was introduced.
+Package version 60 and the unchanged signing certificate were verified. This is automated
+lifecycle/storage coverage, not a physical Razr validation or proof of its original callback path.

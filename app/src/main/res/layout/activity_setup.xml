@@ -20,6 +20,14 @@
             android:layout_marginBottom="8dp" />
 
         <TextView
+            android:id="@+id/txtVersion"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/status_text"
+            android:textSize="12sp"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/settings_enable_instructions"
@@ -602,15 +610,6 @@
             android:text="@string/update_check"
             android:textColor="@color/text_primary"
             android:backgroundTint="@color/key_bg"
-            android:layout_marginBottom="8dp" />
-
-        <TextView
-            android:id="@+id/txtVersion"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:textColor="@color/status_text"
-            android:textSize="12sp"
             android:layout_marginBottom="8dp" />
 
         <TextView

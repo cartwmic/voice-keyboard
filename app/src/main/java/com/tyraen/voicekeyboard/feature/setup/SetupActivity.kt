@@ -2,9 +2,11 @@ package com.tyraen.voicekeyboard.feature.setup
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.Editable
@@ -192,14 +194,44 @@ class SetupActivity : AppCompatActivity() {
         val txtGetApiKeyMistral: TextView = findViewById(R.id.txtGetApiKeyMistral)
         val txtGithub: TextView = findViewById(R.id.txtGithub)
 
-        try {
-            val versionName = packageManager.getPackageInfo(packageName, 0).versionName
-            txtVersion.text = "v$versionName"
-        } catch (_: Exception) {}
+        txtVersion.text = installedBuildLabel()
 
         setupLink(txtGetApiKey, "https://console.groq.com/keys")
         setupLink(txtGetApiKeyMistral, "https://console.mistral.ai/api-keys")
         setupLink(txtGithub, "https://github.com/rustemar/voice-keyboard")
+    }
+
+    @Suppress("DEPRECATION")
+    private fun installedBuildLabel(): String = try {
+        val info = packageManager.getPackageInfo(packageName, 0)
+        val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode
+        else info.versionCode.toLong()
+        getString(
+            if (BuildConfig.DEBUG) R.string.settings_installed_test_build else R.string.settings_installed_build,
+            info.versionName ?: getString(R.string.settings_build_version_unknown),
+            versionCode
+        )
+    } catch (_: Exception) {
+        getString(R.string.settings_installed_build_unavailable, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
+    }
+
+    private fun buildLayoutDiagnostics(): String {
+        val selected = try {
+            Settings.Secure.getString(contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
+                ?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
+        val selectedComponent = selected?.let { ComponentName.unflattenFromString(it) }
+        return buildString {
+            appendLine(installedBuildLabel())
+            appendLine("App package: $packageName")
+            appendLine("Selected keyboard component at copy time: ${selected ?: "unavailable or not selected"}")
+            appendLine("Selection matches this settings app at copy time: ${selectedComponent?.let { it.packageName == packageName } ?: "unknown"}")
+            appendLine("The selection at copy time may differ from the keyboard that produced the saved snapshots.")
+            appendLine()
+            append(KeyboardLayoutDiagnostics.read(this@SetupActivity))
+        }
     }
 
     private fun setupActions() {
@@ -378,7 +410,7 @@ class SetupActivity : AppCompatActivity() {
             val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText(
                 getString(R.string.settings_layout_diagnostics_label),
-                KeyboardLayoutDiagnostics.read(this)
+                buildLayoutDiagnostics()
             ))
             Toast.makeText(this, R.string.settings_layout_diagnostics_copied, Toast.LENGTH_SHORT).show()
         }
