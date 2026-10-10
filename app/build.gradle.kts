@@ -53,7 +53,7 @@ android {
         debug {
             // Side-by-side test install: never replace the upstream app or its saved providers.
             applicationIdSuffix = ".compacttest"
-            versionNameSuffix = "-compact-test"
+            versionNameSuffix = "-compact-test2"
         }
         release {
             isMinifyEnabled = true
@@ -79,6 +79,12 @@ android {
     testOptions { unitTests.isIncludeAndroidResources = true }
     buildFeatures {
         buildConfig = true
+    }
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("debug")) { variant ->
+        variant.outputs.forEach { it.versionCode.set(59) }
     }
 }
 

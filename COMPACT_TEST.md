@@ -85,3 +85,30 @@ Validated in the cloud build environment on 2026-10-09 with JDK 17, Android SDK 
 and 69 warnings, including existing project warnings. The debug APK signature and separate
 application identity were verified. No physical Razr, microphone session, TalkBack session or
 private homelab request was tested here.
+
+## Test update 2: camera-window readiness and diagnostics
+
+Version `1.9.7-compact-test2` uses version code 59 and the same application ID and debug signing
+identity as the first test APK. Install it over **Voice Keyboard Compact Test**; Android preserves
+that test app's saved endpoint and other settings. The separately installed upstream app remains
+untouched.
+
+This update fixes an early fallback that could turn the camera-space experiment off for an entire
+view after one incomplete inset delivery. It now waits for fresh, attached, measured window insets,
+allows a bounded settling period, and retries on a new keyboard appearance or physical-display
+change. Temporary detach/reattach follows the service's visibility request. One late recovery is
+allowed per display/show cycle, preventing repeated DEFAULT/ALWAYS mode cycling. Controls wait to
+appear until either usable geometry or the normal safe window traversal is ready; they are never
+shown in an unmeasured camera area. The 260 dp fit threshold and 48 dp minimum targets are unchanged.
+
+Diagnostics now retain the last visible controls alongside the latest event, with UTC timestamp,
+visibility, the actual configuration bound to that view, current settings, density, camera-free
+width and the current requested cutout mode. A requested mode is not proof of the bounds granted
+by Android. These timing fixes do not establish or bypass any Motorola window restriction.
+
+Update 2 validation (2026-10-10): 285/285 automated tests passed, including 29 readiness,
+5 window-adapter, 9 diagnostics, 22 placement and 5 original compact UI tests. APK assembly
+and lint passed (0 errors; 72 warnings, with no warnings in the new repair code). Android
+package version 59 and the unchanged signing certificate were verified. Physical Razr
+behavior remains a device test; this update fixes a confirmed timing defect without
+claiming that it resolves every camera-area restriction.

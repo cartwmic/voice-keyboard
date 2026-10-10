@@ -60,6 +60,7 @@ class DictationInputMethod : InputMethodService() {
     private lateinit var keystrokes: KeystrokeDispatcher
     private var currentTheme: String = ""
     private var currentLayout = KeyboardLayoutConfig()
+    private var compactSession: CompactInputPanelSession? = null
     private var clipboardListener: ClipboardManager.OnPrimaryClipChangedListener? = null
     private var keyboardVisible = false
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -88,44 +89,45 @@ class DictationInputMethod : InputMethodService() {
         }
 
         if (::keystrokes.isInitialized) keystrokes.stopBackspaceRepeat()
+        compactSession?.dispose()
+        compactSession = null
         currentTheme = ThemeManager.current(this)
         val themedContext = ThemeManager.applyToContext(this)
         val view = LayoutInflater.from(themedContext).inflate(R.layout.input_panel, null)
         currentLayout = KeyboardLayoutPreferences.current(this)
+        val layoutForView = currentLayout
         val imeWindow = window.window
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            imeWindow?.attributes = imeWindow?.attributes?.apply {
-                layoutInDisplayCutoutMode = if (currentLayout.compact && currentLayout.besideCameras &&
-                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-                ) WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
-                else WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+        // Start from the safe window. The visible compact session owns any camera-space probe.
+        fun requestCameraMode(enabled: Boolean) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                imeWindow?.attributes = imeWindow?.attributes?.apply {
+                    layoutInDisplayCutoutMode = if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+                        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                    else WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+                }
+                ViewCompat.requestApplyInsets(view)
             }
         }
-        if (currentLayout.compact) CompactInputPanel.apply(
+        requestCameraMode(false)
+        if (currentLayout.compact) compactSession = CompactInputPanel.apply(
             view as ConstraintLayout, currentLayout.heightDp,
             besideCameras = currentLayout.besideCameras && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R,
-            onDiagnostics = { geometry ->
+            onDiagnostics = { geometry, controlsVisible ->
                 val decor = imeWindow?.decorView
                 val location = IntArray(2)
                 decor?.getLocationOnScreen(location)
                 KeyboardLayoutDiagnostics.save(this, buildString {
-                    appendLine("Voice Keyboard compact layout")
+                    appendLine("Voice Keyboard compact layout ${com.tyraen.voicekeyboard.BuildConfig.VERSION_NAME}")
                     appendLine("Android API: ${Build.VERSION.SDK_INT}; display: ${view.display?.displayId}")
-                    appendLine("Requested beside cameras: ${currentLayout.besideCameras}")
-                    appendLine("Cutout mode: ${if (Build.VERSION.SDK_INT >= 28) imeWindow?.attributes?.layoutInDisplayCutoutMode else "not supported"}")
+                    appendLine("Requested beside cameras: ${layoutForView.besideCameras}")
+                    appendLine("IME service shown: $keyboardVisible")
+                    appendLine("Current requested cutout mode: ${if (Build.VERSION.SDK_INT >= 28) imeWindow?.attributes?.layoutInDisplayCutoutMode else "not supported"} (0=DEFAULT, 3=ALWAYS; not proof of granted bounds)")
                     appendLine("IME fullscreen extracted editor: $isFullscreenMode")
                     appendLine("Decor screen bounds: ${location[0]},${location[1]} ${decor?.width}x${decor?.height}")
                     append(geometry)
-                })
+                }, visible = keyboardVisible && controlsVisible, layout = layoutForView)
             },
-            onMissingCameraGeometry = {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    imeWindow?.attributes = imeWindow?.attributes?.apply {
-                        layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
-                    }
-                    ViewCompat.requestApplyInsets(view)
-                }
-            }
+            onCameraModeRequested = ::requestCameraMode
         )
         matchNavigationBarToPanel(themedContext)
 
@@ -173,6 +175,7 @@ class DictationInputMethod : InputMethodService() {
         orchestrator.loadPreferences()
         wireControls(view)
         applyFieldToPanel(currentInputEditorInfo)
+        if (keyboardVisible) compactSession?.onShown()
         return view
     }
 
@@ -232,6 +235,7 @@ class DictationInputMethod : InputMethodService() {
             setInputView(createInputView())
         }
 
+        compactSession?.onShown()
         if (::orchestrator.isInitialized) {
             orchestrator.viewVisible = true
             orchestrator.reloadAndAutoStart()
@@ -247,6 +251,7 @@ class DictationInputMethod : InputMethodService() {
     override fun onWindowHidden() {
         super.onWindowHidden()
         keyboardVisible = false
+        compactSession?.onHidden()
         if (::keystrokes.isInitialized) keystrokes.stopBackspaceRepeat()
         lastDictationInserted = false
         mainHandler.removeCallbacks(returnCheck)
@@ -339,6 +344,7 @@ class DictationInputMethod : InputMethodService() {
             // The service lives on until onDestroy, still holding the editor's connection, which the
             // app has already deactivated: anything delivered in that gap goes to the clipboard.
             keyboardVisible = false
+            compactSession?.onHidden()
             orchestrator.viewVisible = false
             mainHandler.removeCallbacks(returnCheck)
             hideIfSwitchFails = hideIfItFails
@@ -359,11 +365,15 @@ class DictationInputMethod : InputMethodService() {
         if (!ReturnToPreviousKeyboard.switchDidNotHappen(selected, packageName) || !isInputViewShown) return
         DiagnosticLog.record(TAG, "Switch to previous keyboard: reported done, but this keyboard is still selected")
         keyboardVisible = true
+        compactSession?.onShown()
         if (::orchestrator.isInitialized) orchestrator.viewVisible = true
         if (hideIfSwitchFails) requestHideSelf(0)
     }
 
     override fun onDestroy() {
+        keyboardVisible = false
+        compactSession?.dispose()
+        compactSession = null
         super.onDestroy()
         if (::keystrokes.isInitialized) keystrokes.stopBackspaceRepeat()
         mainHandler.removeCallbacks(returnCheck)

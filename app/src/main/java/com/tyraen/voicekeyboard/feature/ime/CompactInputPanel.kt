@@ -9,8 +9,6 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
 import com.tyraen.voicekeyboard.R
 import kotlin.math.roundToInt
 
@@ -20,9 +18,9 @@ object CompactInputPanel {
         root: ConstraintLayout,
         heightDp: Int,
         besideCameras: Boolean = false,
-        onDiagnostics: (String) -> Unit = {},
-        onMissingCameraGeometry: () -> Unit = {}
-    ) {
+        onDiagnostics: (String, Boolean) -> Unit = { _, _ -> },
+        onCameraModeRequested: (Boolean) -> Unit = {}
+    ): CompactInputPanelSession {
         val density = root.resources.displayMetrics.density
         fun dp(value: Int) = (value * density).roundToInt()
         val previous = root.findViewById<ImageButton>(R.id.btnPreviousKeyboard)
@@ -93,84 +91,6 @@ object CompactInputPanel {
             topToTop = ConstraintLayout.LayoutParams.PARENT_ID
             bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
         })
-        // Navigation remains owned by the IME framework. Never pad by ime() (our own height),
-        // and never add navigationBars() again on top of the framework's fitted window.
-        var latestInsets: WindowInsetsCompat? = null
-        var lastReport = ""
-        var cameraModeActive = besideCameras
-        var cameraFallbackReason: String? = null
-        fun applyInsets() {
-            val insets = latestInsets ?: return
-            val safe = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
-            val rootInsets = ViewCompat.getRootWindowInsets(root) ?: insets
-            val cutout = rootInsets.displayCutout
-            val waterfall = cutout?.waterfallInsets ?: androidx.core.graphics.Insets.NONE
-            if (cameraModeActive && root.isAttachedToWindow && root.width > 0 && root.height > 0 &&
-                cutout?.boundingRects.isNullOrEmpty()
-            ) {
-                // Missing geometry is not proof that a physical camera is absent. Restore the
-                // system-safe window rather than leave buttons in an unverified cutout region.
-                cameraModeActive = false
-                cameraFallbackReason = "missing_geometry_system_default"
-                root.post { onMissingCameraGeometry() }
-            }
-            val location = IntArray(2)
-            root.getLocationInWindow(location)
-            // Normalize against the nominal bottom row, not the currently padded row. Otherwise
-            // adding bottom padding moves the origin and oscillates between padded/unpadded.
-            val nominalTop = location[1] + root.height - dp(heightDp.coerceIn(56, 72)) -
-                if (cameraModeActive) waterfall.bottom else 0
-            val bounds = cutout?.boundingRects.orEmpty().map { rect ->
-                CompactCameraPlacement.Bounds(
-                    rect.left - location[0] - dp(4), rect.top - nominalTop - dp(4),
-                    rect.right - location[0] + dp(4), rect.bottom - nominalTop + dp(4)
-                )
-            }
-            val placement = when {
-                !cameraModeActive -> CompactCameraPlacement.Placement(safe.left, safe.right, safe.bottom, cameraFallbackReason ?: "safe_insets")
-                root.width == 0 || root.height == 0 ->
-                    CompactCameraPlacement.Placement(safe.left, safe.right, safe.bottom, "awaiting_layout")
-                bounds.isEmpty() && (safe.left > 0 || safe.right > 0 || safe.bottom > 0) ->
-                    CompactCameraPlacement.Placement(safe.left, safe.right, safe.bottom, "no_cutout_rectangles")
-                else -> CompactCameraPlacement.choose(
-                    (root.width - waterfall.left - waterfall.right).coerceAtLeast(0),
-                    dp(heightDp.coerceIn(56, 72)), dp(260),
-                    bounds.map { it.copy(left = it.left - waterfall.left, right = it.right - waterfall.left) }
-                ).let { it.copy(leftPadding = it.leftPadding + waterfall.left, rightPadding = it.rightPadding + waterfall.right) }
-            }
-            val left = dp(4) + maxOf(placement.leftPadding, waterfall.left)
-            val right = dp(4) + maxOf(placement.rightPadding, waterfall.right)
-            val bottom = dp(4) + if (cameraModeActive && bounds.isNotEmpty()) {
-                placement.bottomPadding + waterfall.bottom
-            } else maxOf(placement.bottomPadding, waterfall.bottom)
-            if (root.paddingLeft != left || root.paddingRight != right || root.paddingBottom != bottom) {
-                root.setPadding(left, dp(4), right, bottom)
-            }
-            val screen = IntArray(2)
-            root.getLocationOnScreen(screen)
-            val report = buildString {
-                appendLine("Input screen bounds: ${screen[0]},${screen[1]} ${root.width}x${root.height}")
-                appendLine("Input window origin: ${location[0]},${location[1]}; nominal row top: $nominalTop")
-                appendLine("Cutout rectangles (window): ${cutout?.boundingRects.orEmpty()}")
-                appendLine("Delivered safe cutout insets: $safe")
-                appendLine("Root navigation insets: ${rootInsets.getInsets(WindowInsetsCompat.Type.navigationBars())}")
-                appendLine("Row: ${heightDp.coerceIn(56, 72)} dp; side-space minimum: 260 dp")
-                appendLine("Placement: ${placement.reason}; padding px: $left,${dp(4)},$right,$bottom")
-                if (cameraModeActive && placement.reason == "clear") {
-                    appendLine("No camera overlaps this row. The phone may already be keeping the IME above it.")
-                }
-            }
-            if (report != lastReport) { lastReport = report; onDiagnostics(report) }
-        }
-        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
-            latestInsets = insets
-            applyInsets()
-            insets
-        }
-        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyInsets() }
-        root.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
-            override fun onViewAttachedToWindow(view: View) { ViewCompat.requestApplyInsets(view) }
-            override fun onViewDetachedFromWindow(view: View) = Unit
-        })
+        return CompactInputPanelSession(root, row, heightDp, besideCameras, onDiagnostics, onCameraModeRequested)
     }
 }
