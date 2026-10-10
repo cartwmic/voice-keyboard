@@ -99,6 +99,7 @@ class DictationInputMethod : InputMethodService() {
         inputRoot = view
         val layoutForView = currentLayout
         val imeWindow = window.window
+        var windowProbe: KeyboardWindowProbe? = null
         // Start from the safe window. The visible compact session owns any camera-space probe.
         fun requestCameraMode(enabled: Boolean) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -109,8 +110,10 @@ class DictationInputMethod : InputMethodService() {
                 }
                 ViewCompat.requestApplyInsets(view)
             }
+            runCatching { windowProbe?.onModeRequested(enabled) }
         }
         requestCameraMode(false)
+        if (currentLayout.compact) windowProbe = KeyboardWindowProbe(this, view, imeWindow)
         if (currentLayout.compact) compactSession = CompactInputPanel.apply(
             view as ConstraintLayout, currentLayout.heightDp,
             besideCameras = currentLayout.besideCameras && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R,
@@ -129,7 +132,8 @@ class DictationInputMethod : InputMethodService() {
                     append(geometry)
                 }, visible = keyboardVisible && controlsVisible, layout = layoutForView)
             },
-            onCameraModeRequested = ::requestCameraMode
+            onCameraModeRequested = ::requestCameraMode,
+            onMeasuredWindowFrame = { camera, epoch, phase, beforeModeChange -> windowProbe?.onMeasuredFrame(camera, epoch, phase, beforeModeChange) }
         )
         matchNavigationBarToPanel(themedContext)
 

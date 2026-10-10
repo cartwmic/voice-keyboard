@@ -16,7 +16,8 @@ class CompactInputPanelSession(
     besideCameras: Boolean,
     private val onDiagnostics: (String, Boolean) -> Unit,
     private val onCameraModeRequested: (Boolean) -> Unit,
-    private val rootInsetsProvider: () -> WindowInsetsCompat? = { ViewCompat.getRootWindowInsets(root) }
+    private val rootInsetsProvider: () -> WindowInsetsCompat? = { ViewCompat.getRootWindowInsets(root) },
+    private val onMeasuredWindowFrame: (Boolean, Long, String, Boolean) -> Unit = { _, _, _, _ -> }
 ) {
     private val heightDp = heightDp.coerceIn(56, 72)
     private val readiness = CameraGeometryReadiness(besideCameras)
@@ -42,6 +43,8 @@ class CompactInputPanelSession(
             // IME framework ancestors can consume descendant inset dispatch. At a completed
             // traversal getRootWindowInsets still describes this window's current frame.
             if (rootInsetsProvider() != null) insetsForRequestedMode = true
+            // Diagnostic observer only: cannot request layout, change readiness or reveal keys.
+            runCatching { onMeasuredWindowFrame(cameraModeRequested, revealEpoch, readiness.phase.name, false) }
             update()
         }
         true
@@ -137,6 +140,11 @@ class CompactInputPanelSession(
     }
 
     private fun requestMode(camera: Boolean) {
+        // Preserve the final measured ALWAYS frame before the existing fallback changes mode.
+        // If a traversal is pending, the earlier measured frame remains the useful evidence.
+        if (!camera && cameraModeRequested && shown && frameBarrierPassed && hasCompletedLayout()) {
+            runCatching { onMeasuredWindowFrame(true, revealEpoch, readiness.phase.name, true) }
+        }
         revealEpoch++
         frameBarrierPassed = false
         val epoch = revealEpoch
@@ -219,7 +227,7 @@ class CompactInputPanelSession(
         lastGeometry = buildString {
             appendLine("Input screen bounds: ${screen[0]},${screen[1]} ${root.width}x${root.height}")
             appendLine("Input window origin: ${location[0]},${location[1]}; nominal row top: $nominalTop")
-            appendLine("Density: $density; display dp: ${root.resources.configuration.screenWidthDp}x${root.resources.configuration.screenHeightDp}")
+            appendLine("Density: $density; IME resource configuration dp (not physical display): ${root.resources.configuration.screenWidthDp}x${root.resources.configuration.screenHeightDp}")
             appendLine("Cutout rectangles (window): ${cutout?.boundingRects.orEmpty()}")
             appendLine("Delivered safe cutout insets: $safe; waterfall: $waterfall")
             appendLine("Root navigation insets: ${rootInsets?.getInsets(WindowInsetsCompat.Type.navigationBars())}")

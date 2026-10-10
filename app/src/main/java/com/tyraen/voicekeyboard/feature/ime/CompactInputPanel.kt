@@ -19,7 +19,8 @@ object CompactInputPanel {
         heightDp: Int,
         besideCameras: Boolean = false,
         onDiagnostics: (String, Boolean) -> Unit = { _, _ -> },
-        onCameraModeRequested: (Boolean) -> Unit = {}
+        onCameraModeRequested: (Boolean) -> Unit = {},
+        onMeasuredWindowFrame: (Boolean, Long, String, Boolean) -> Unit = { _, _, _, _ -> }
     ): CompactInputPanelSession {
         val density = root.resources.displayMetrics.density
         fun dp(value: Int) = (value * density).roundToInt()
@@ -91,6 +92,7 @@ object CompactInputPanel {
             topToTop = ConstraintLayout.LayoutParams.PARENT_ID
             bottomToBottom = ConstraintLayout.LayoutParams.PARENT_ID
         })
-        return CompactInputPanelSession(root, row, heightDp, besideCameras, onDiagnostics, onCameraModeRequested)
+        return CompactInputPanelSession(root, row, heightDp, besideCameras, onDiagnostics, onCameraModeRequested,
+            onMeasuredWindowFrame = onMeasuredWindowFrame)
     }
 }

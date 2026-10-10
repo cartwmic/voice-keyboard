@@ -181,3 +181,36 @@ camera geometry were not validated by this acceptance run.
 The delivered test4 APK is byte-identical to the aggregate-tested and emulator-tested candidate:
 SHA-256 `234a51a9b4f992d1e31f48307db91a42779c54093b41df3a7f4f49abe258d21a`.
 It is an in-place same-signature update for the test app; no uninstall is required.
+
+## Test update 5: paired window diagnostics only
+
+Version `1.9.7-compact-test5` / code 62 preserves test4's placement, readiness timeout,
+control sizing and visibility rules. It adds read-only observers after the existing completed
+traversal barrier, plus a final measured ALWAYS capture before the existing fallback changes
+window attributes. If that final frame is unmeasured or awaiting layout, the first valid frame
+is retained instead. Ordinary redraws do not repeatedly query or persist these metrics.
+
+The copied report retains separate ALWAYS and DEFAULT measurements with timestamps, probe IDs,
+actual attribute readback, input/decor bounds, root insets, current/maximum WindowMetrics and
+cutouts, Display.Mode physical resolution/rotation, target SDK and correctly labelled IME
+resource configuration dimensions. Null insets/cutouts are distinct from present zero values.
+A failed individual platform read is labelled unavailable without discarding other evidence.
+One previous probe is retained across a newer/recovery probe, preferring a complete pair;
+if no complete pair exists, measured ALWAYS evidence is kept with missing DEFAULT explicitly
+labelled. Measurements never feed back
+into placement or camera geometry decisions. No text, recording or provider data is captured.
+
+Update 5 automated validation: 323/323 tests in 28 suites passed, including 12 new collector/
+observer tests and 11 new storage-retention tests. APK assembly and lint passed (0 errors,
+74 unchanged warnings). Independent review verified observer exception isolation, no view/window
+mutations, the existing traversal barrier, pre-reversion capture ordering, bounded sampling,
+null-versus-zero handling and previous-probe retention. Version 62 and the unchanged signing
+certificate were verified. Mac emulator acceptance then verified rendered controls and editing
+in both safe and experimental fallback modes, plus copied diagnostics containing measured
+ALWAYS and DEFAULT frames, current/maximum window metrics and physical display metadata.
+Reinspection of the questioned post-key screenshot confirmed controls remained visible and
+focus was maintained. No physical Razr camera-placement or recording/transcription claim is made.
+
+Delivered test5 SHA-256:
+`ad59141525f80028324216d20931a91a67bf7afa1eefb7c3735cc534b50bbd98`.
+The separately retained test4 APK is unchanged.
