@@ -28,16 +28,30 @@ class CompactInputPanelSession(
     private var cameraModeRequested = false
     private var insetsForRequestedMode = false
     private var revealEpoch = 0L
+    private var frameBarrierPassed = false
     private var lastReport = ""
     private var lastGeometry = "No inset measurement yet."
     private var pendingReveal: ViewTreeObserver.OnPreDrawListener? = null
+    private var frameObserver: ViewTreeObserver? = null
     private val density get() = root.resources.displayMetrics.density
     private fun dp(value: Int) = (value * density).roundToInt()
 
     private val layoutListener = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> update() }
+    private val frameListener = ViewTreeObserver.OnPreDrawListener {
+        if (!disposed && shown && frameBarrierPassed && hasCompletedLayout()) {
+            // IME framework ancestors can consume descendant inset dispatch. At a completed
+            // traversal getRootWindowInsets still describes this window's current frame.
+            if (rootInsetsProvider() != null) insetsForRequestedMode = true
+            update()
+        }
+        true
+    }
     private val attachListener = object : View.OnAttachStateChangeListener {
         override fun onViewAttachedToWindow(view: View) {
-            if (requestedShown) resumeShown()
+            if (requestedShown) {
+                bindFrameListener()
+                resumeShown()
+            }
             ViewCompat.requestApplyInsets(view)
             update()
         }
@@ -67,7 +81,7 @@ class CompactInputPanelSession(
     private fun resumeShown() {
         if (disposed || shown) return
         shown = true
-        latestInsets = rootInsetsProvider() ?: latestInsets
+        if (root.isAttachedToWindow) bindFrameListener()
         handle(readiness.onShown())
         ViewCompat.requestApplyInsets(root)
         update(forceReport = true)
@@ -81,6 +95,7 @@ class CompactInputPanelSession(
     private fun pauseShown() {
         if (disposed || !shown) return
         shown = false
+        unbindFrameListener()
         revealEpoch++
         removePendingReveal()
         handle(readiness.onHidden())
@@ -97,6 +112,7 @@ class CompactInputPanelSession(
         ViewCompat.setOnApplyWindowInsetsListener(root, null)
         root.removeOnLayoutChangeListener(layoutListener)
         root.removeOnAttachStateChangeListener(attachListener)
+        unbindFrameListener()
     }
 
     private fun handle(effects: List<CameraGeometryReadiness.Effect>) {
@@ -122,15 +138,27 @@ class CompactInputPanelSession(
 
     private fun requestMode(camera: Boolean) {
         revealEpoch++
+        frameBarrierPassed = false
+        val epoch = revealEpoch
         removePendingReveal()
         // A newly extended window may temporarily lack camera bounds. Never expose controls
         // in that unverified area; reveal them after safe placement and the next traversal.
         if (shown) row.visibility = View.INVISIBLE
         cameraModeRequested = camera
+        latestInsets = null // Residual child padding belongs to the previous window-mode epoch.
         insetsForRequestedMode = false
         onCameraModeRequested(camera) // Synchronous: diagnostics below see the new attribute.
         root.requestLayout()
         ViewCompat.requestApplyInsets(root)
+        // A mode request can occur during an existing traversal. Post another traversal so
+        // neither geometry sampling nor safe reveal accepts that old frame as the new mode.
+        root.post {
+            if (!disposed && shown && epoch == revealEpoch) {
+                frameBarrierPassed = true
+                root.requestLayout()
+                root.invalidate()
+            }
+        }
     }
 
     private fun update(forceReport: Boolean = false) {
@@ -183,7 +211,7 @@ class CompactInputPanelSession(
             root.setPadding(left, dp(4), right, bottom)
         }
         if (shown) {
-            val canReveal = insetsForRequestedMode && (!cameraModeRequested || useGeometry)
+            val canReveal = !cameraModeRequested || (insetsForRequestedMode && useGeometry)
             if (canReveal) revealAfterTraversal() else row.visibility = View.INVISIBLE
         }
         val screen = IntArray(2)
@@ -215,7 +243,8 @@ class CompactInputPanelSession(
             override fun onPreDraw(): Boolean {
                 removePendingReveal()
                 if (!disposed && shown && epoch == revealEpoch &&
-                    insetsForRequestedMode && (!cameraModeRequested || readiness.useGeometry)
+                    frameBarrierPassed && hasCompletedLayout() &&
+                    (!cameraModeRequested || (insetsForRequestedMode && readiness.useGeometry))
                 ) {
                     row.visibility = View.VISIBLE
                     emit(force = true)
@@ -231,6 +260,22 @@ class CompactInputPanelSession(
     private fun removePendingReveal() {
         pendingReveal?.let { if (root.viewTreeObserver.isAlive) root.viewTreeObserver.removeOnPreDrawListener(it) }
         pendingReveal = null
+    }
+
+    private fun hasCompletedLayout() = root.isAttachedToWindow && root.width > 0 &&
+        root.height > 0 && !root.isLayoutRequested
+
+    private fun bindFrameListener() {
+        val observer = root.viewTreeObserver
+        if (frameObserver === observer) return
+        unbindFrameListener()
+        observer.addOnPreDrawListener(frameListener)
+        frameObserver = observer
+    }
+
+    private fun unbindFrameListener() {
+        frameObserver?.let { if (it.isAlive) it.removeOnPreDrawListener(frameListener) }
+        frameObserver = null
     }
 
     private fun emit(force: Boolean = false) {

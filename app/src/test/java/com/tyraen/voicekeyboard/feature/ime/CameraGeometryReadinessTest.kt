@@ -55,13 +55,15 @@ class CameraGeometryReadinessTest {
         assertFalse(machine.useGeometry)
     }
 
-    @Test fun `zero dimensions and undelivered insets cannot start the timer`() {
+    @Test fun `zero dimensions wait but measured missing insets have a bounded deadline`() {
         val machine = shown()
         assertTrue(machine.observe(observation(width = 0)).isEmpty())
         assertTrue(machine.observe(observation(height = 0)).isEmpty())
-        assertTrue(machine.observe(observation(insetsReady = false)).isEmpty())
+        val timer = machine.observe(observation(insetsReady = false)).single() as Effect.ScheduleTimeout
         assertEquals(Phase.WAITING, machine.phase)
-        assertEquals(1L, settling(machine).token)
+        assertTrue(machine.observe(observation(insetsReady = false)).isEmpty())
+        assertEquals(listOf(Effect.RequestSafeMode), machine.onTimeout(timer.token))
+        assertEquals(Phase.FALLBACK, machine.phase)
     }
 
     @Test fun `a valid deadline falls back once and does not permanently disable the option`() {
@@ -87,9 +89,9 @@ class CameraGeometryReadinessTest {
         assertEquals(listOf(Effect.RequestCameraMode), machine.observe(observation(geometry = true)))
         assertEquals(Phase.WAITING, machine.phase)
         assertFalse(machine.useGeometry)
-        assertTrue(machine.observe(observation(geometry = true, insetsReady = false)).isEmpty())
+        assertTrue(machine.observe(observation(geometry = true, insetsReady = false)).single() is Effect.ScheduleTimeout)
         assertEquals(Phase.WAITING, machine.phase)
-        assertTrue(machine.observe(observation(geometry = true)).isEmpty())
+        assertEquals(listOf(Effect.CancelTimeout), machine.observe(observation(geometry = true)))
         assertTrue(machine.useGeometry)
     }
 
@@ -277,20 +279,27 @@ class CameraGeometryReadinessTest {
         assertEquals(listOf(Effect.RequestCameraMode), machine.observe(observation(width = 600, displayId = 2)))
     }
 
-    @Test fun `new insets readiness gets a unique timer after an interrupted traversal`() {
+    @Test fun `interrupted inset delivery cannot postpone an attached probe deadline`() {
         val machine = shown()
         val oldTimer = settling(machine)
-        assertEquals(listOf(Effect.CancelTimeout), machine.observe(observation(insetsReady = false)))
-        val newTimer = settling(machine)
-        assertNotEquals(oldTimer.token, newTimer.token)
-        assertTrue(machine.onTimeout(oldTimer.token).isEmpty())
-        assertEquals(listOf(Effect.RequestSafeMode), machine.onTimeout(newTimer.token))
+        assertTrue(machine.observe(observation(insetsReady = false)).isEmpty())
+        assertTrue(machine.observe(observation()).isEmpty())
+        assertEquals(listOf(Effect.RequestSafeMode), machine.onTimeout(oldTimer.token))
     }
 
     @Test fun `geometry disappearing gets a bounded new settling interval`() {
         val machine = shown()
         machine.observe(observation(geometry = true))
         val timer = settling(machine)
+        assertFalse(machine.useGeometry)
+        assertEquals(listOf(Effect.RequestSafeMode), machine.onTimeout(timer.token))
+    }
+
+    @Test fun `lost inset readiness invalidates previously usable geometry`() {
+        val machine = shown()
+        machine.observe(observation(geometry = true))
+        val timer = machine.observe(observation(insetsReady = false)).single() as Effect.ScheduleTimeout
+        assertEquals(Phase.WAITING, machine.phase)
         assertFalse(machine.useGeometry)
         assertEquals(listOf(Effect.RequestSafeMode), machine.onTimeout(timer.token))
     }

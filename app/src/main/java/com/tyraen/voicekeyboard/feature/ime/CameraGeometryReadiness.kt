@@ -72,7 +72,8 @@ class CameraGeometryReadiness(
     }
 
     /**
-     * insetsReady must mean a fresh inset delivery for the currently requested window mode.
+     * insetsReady means current window insets sampled after a mode's completed traversal,
+     * or a fresh descendant inset delivery for the currently requested window mode.
      * The Android adapter clears that flag whenever it handles RequestCameraMode/RequestSafeMode.
      * It also keeps the row hidden until the corresponding geometry or safe traversal is applied.
      *
@@ -105,8 +106,16 @@ class CameraGeometryReadiness(
             }
         }
 
-        if (observation.widthPx <= 0 || observation.heightPx <= 0 || !observation.insetsReady) {
+        if (observation.widthPx <= 0 || observation.heightPx <= 0) {
             suspendReadiness(effects)
+            return effects
+        }
+
+        // A consumed descendant inset dispatch must not leave a measured keyboard hidden
+        // forever. Bound the whole attached probe, including the wait for its first insets.
+        if (!observation.insetsReady) {
+            if (phase == Phase.GEOMETRY) phase = Phase.WAITING
+            if (phase != Phase.FALLBACK) scheduleTimer(effects)
             return effects
         }
 
@@ -129,15 +138,13 @@ class CameraGeometryReadiness(
 
         if (phase != Phase.FALLBACK && phase != Phase.SETTLING) {
             phase = Phase.SETTLING
-            val token = ++nextTimerToken
-            pendingTimerToken = token
-            effects.add(Effect.ScheduleTimeout(token, settleDelayMs))
+            scheduleTimer(effects)
         }
         return effects
     }
 
     fun onTimeout(token: Long): List<Effect> {
-        if (!shown || !enabled || phase != Phase.SETTLING || pendingTimerToken != token) {
+        if (!shown || !enabled || phase !in listOf(Phase.WAITING, Phase.SETTLING) || pendingTimerToken != token) {
             return emptyList()
         }
         pendingTimerToken = null
@@ -159,6 +166,13 @@ class CameraGeometryReadiness(
             pendingTimerToken = null
             effects.add(Effect.CancelTimeout)
         }
+    }
+
+    private fun scheduleTimer(effects: MutableList<Effect>) {
+        if (pendingTimerToken != null) return
+        val token = ++nextTimerToken
+        pendingTimerToken = token
+        effects.add(Effect.ScheduleTimeout(token, settleDelayMs))
     }
 
     private fun suspendReadiness(effects: MutableList<Effect>) {

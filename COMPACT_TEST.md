@@ -143,3 +143,41 @@ comes from three dependency-update notices on unchanged dependencies, minus one 
 text-concatenation warning; no new diagnostic/lifecycle/accessibility warning was introduced.
 Package version 60 and the unchanged signing certificate were verified. This is automated
 lifecycle/storage coverage, not a physical Razr validation or proof of its original callback path.
+
+## Test update 4: render compact controls when ancestor insets are consumed
+
+Version `1.9.7-compact-test4` / code 61 keeps the test package and signing key.
+The previous visibility gate depended on an inset callback reaching the nested input panel.
+Android framework ancestors may consume that dispatch while root-window insets remain available.
+This could hide the row indefinitely, even with the camera experiment disabled; the camera
+fallback timer also incorrectly waited for the missing callback before starting.
+
+The measured, attached camera probe now has a bounded deadline even without inset delivery.
+DEFAULT-mode controls are revealed after a completed, current-mode layout traversal rather than
+waiting for descendant insets. Camera geometry is sampled from root-window insets after a posted
+traversal barrier; stale epochs cannot reveal controls. Listeners are rebound across attachment
+changes, and root geometry is kept separate from child residual padding. No camera target is
+shrunk or intentionally placed over an unmeasured camera area.
+
+New regression tests first failed against test3 in ordinary compact mode and camera mode without
+manually dispatching insets. They complement, rather than replace, actual APK runtime validation.
+
+Update 4 automated validation: 300/300 tests passed, including consuming-ancestor visibility
+and cross-window observer rebinding regressions. APK assembly and lint passed (0 errors,
+74 existing warnings). Version 61 and the unchanged signing certificate were verified.
+
+Actual Android 14 emulator baseline reproduced test3's blank panel in both ordinary compact
+mode (DISABLED readiness) and camera mode (WAITING readiness). In each case the IME reported
+a measured 320×64 window, panel shown, and controls hidden. Unobstructed rendered screenshots
+were captured. Test4's settled screenshot on the same emulator shows all four compact controls.
+
+Independent hardware-accelerated Mac emulator acceptance also reproduced test3's blank panel
+and verified test4 renders in safe mode and experimental no-cutout fallback. Actual interactions
+passed for Backspace, multiline Enter, single-line editor action 6, keyboard switching,
+hide/show, settings and copied diagnostics. A 360 dp square display and landscape after refocus
+were checked. No crashes were reported. Recording/transcription lifecycle and Motorola's real
+camera geometry were not validated by this acceptance run.
+
+The delivered test4 APK is byte-identical to the aggregate-tested and emulator-tested candidate:
+SHA-256 `234a51a9b4f992d1e31f48307db91a42779c54093b41df3a7f4f49abe258d21a`.
+It is an in-place same-signature update for the test app; no uninstall is required.

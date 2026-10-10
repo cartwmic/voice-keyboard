@@ -6,6 +6,7 @@ import android.graphics.Rect
 import android.os.Looper
 import android.view.Gravity
 import android.view.View
+import android.view.WindowInsets
 import android.widget.FrameLayout
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.view.DisplayCutoutCompat
@@ -27,7 +28,13 @@ class CompactInputPanelSessionTest {
     private val activityController = Robolectric.buildActivity(Activity::class.java).setup()
     private val activity = activityController.get()
     private val holder = FrameLayout(activity)
-    private val root = ConstraintLayout(activity)
+    private var descendantInsetDispatches = 0
+    private val root = object : ConstraintLayout(activity) {
+        override fun dispatchApplyWindowInsets(insets: WindowInsets): WindowInsets {
+            descendantInsetDispatches++
+            return super.dispatchApplyWindowInsets(insets)
+        }
+    }
     private val row = View(activity)
     private var insets = WindowInsetsCompat.Builder().build()
     private var requestedMode = "DEFAULT"
@@ -35,7 +42,7 @@ class CompactInputPanelSessionTest {
     private val reports = mutableListOf<String>()
     private var session: CompactInputPanelSession? = null
 
-    private fun start(): CompactInputPanelSession {
+    private fun start(besideCameras: Boolean = true): CompactInputPanelSession {
         root.addView(row, ConstraintLayout.LayoutParams(0, 56).apply {
             startToStart = 0; endToEnd = 0; topToTop = 0
         })
@@ -44,7 +51,7 @@ class CompactInputPanelSessionTest {
         holder.measure(View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(640, View.MeasureSpec.EXACTLY))
         holder.layout(0, 0, 320, 640)
-        return CompactInputPanelSession(root, row, 64, true,
+        return CompactInputPanelSession(root, row, 64, besideCameras,
             onDiagnostics = { report, visible -> reports.add("mode=$requestedMode visible=$visible $report") },
             onCameraModeRequested = { camera ->
                 modes.add(camera)
@@ -61,11 +68,98 @@ class CompactInputPanelSessionTest {
         ViewCompat.dispatchApplyWindowInsets(root, insets)
     }
 
-    private fun preDraw() { root.viewTreeObserver.dispatchOnPreDraw() }
+    private fun preDraw(container: FrameLayout = holder) {
+        shadowOf(Looper.getMainLooper()).idle()
+        container.measure(View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(640, View.MeasureSpec.EXACTLY))
+        container.layout(0, 0, 320, 640)
+        root.viewTreeObserver.dispatchOnPreDraw()
+    }
+
+    private fun consumeDescendantInsets(container: FrameLayout) {
+        ViewCompat.setOnApplyWindowInsetsListener(container) { _, _ -> WindowInsetsCompat.CONSUMED }
+    }
 
     @After fun cleanup() {
         session?.dispose()
         activityController.pause().stop().destroy()
+    }
+
+    @Test fun `normal compact mode renders without descendant inset delivery`() {
+        start(besideCameras = false)
+        preDraw()
+        assertEquals("DEFAULT", requestedMode)
+        assertEquals(View.VISIBLE, row.visibility)
+    }
+
+    @Test fun `camera probe without descendant inset delivery returns to usable safe row`() {
+        start()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(1500))
+        preDraw()
+        assertEquals("DEFAULT", requestedMode)
+        assertEquals(View.VISIBLE, row.visibility)
+    }
+
+    @Test fun `consuming IME ancestor cannot hide normal compact controls`() {
+        consumeDescendantInsets(holder)
+        start(besideCameras = false)
+        // Dispatch only to the ancestor. Its consumption deliberately prevents our panel's
+        // OnApplyWindowInsetsListener from running, as the IME decor can do on-device.
+        ViewCompat.dispatchApplyWindowInsets(holder, insets)
+        preDraw()
+        preDraw()
+        assertEquals(0, descendantInsetDispatches)
+        assertEquals("DEFAULT", requestedMode)
+        assertEquals(View.VISIBLE, row.visibility)
+        assertTrue(root.width > 0 && root.height > 0)
+        assertTrue(reports.last().contains("visible=true"))
+    }
+
+    @Test fun `consuming IME ancestor still permits bounded camera fallback`() {
+        consumeDescendantInsets(holder)
+        start()
+        ViewCompat.dispatchApplyWindowInsets(holder, insets)
+        preDraw()
+        assertEquals(View.INVISIBLE, row.visibility)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(501))
+        preDraw()
+        preDraw()
+        assertEquals(0, descendantInsetDispatches)
+        assertEquals(listOf(true, false), modes)
+        assertEquals("DEFAULT", requestedMode)
+        assertEquals(View.VISIBLE, row.visibility)
+        assertTrue(reports.last().contains("FALLBACK"))
+    }
+
+    @Test fun `camera frame observer follows a reattachment to another window`() {
+        consumeDescendantInsets(holder)
+        start()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(501))
+        preDraw()
+        preDraw()
+        assertEquals(View.VISIBLE, row.visibility)
+
+        val otherController = Robolectric.buildActivity(Activity::class.java).setup()
+        try {
+            val otherHolder = FrameLayout(otherController.get())
+            consumeDescendantInsets(otherHolder)
+            val params = root.layoutParams
+            holder.removeView(root)
+            insets = WindowInsetsCompat.Builder().setDisplayCutout(
+                DisplayCutoutCompat(Rect(0, 0, 0, 80), listOf(Rect(280, 560, 320, 640)))
+            ).build()
+            otherHolder.addView(root, params)
+            otherController.get().setContentView(otherHolder)
+            ViewCompat.dispatchApplyWindowInsets(otherHolder, insets)
+            preDraw(otherHolder)
+            preDraw(otherHolder)
+            assertEquals(0, descendantInsetDispatches)
+            assertEquals("ALWAYS", requestedMode)
+            assertEquals(View.VISIBLE, row.visibility)
+            assertTrue(reports.last().contains("GEOMETRY"))
+        } finally {
+            otherController.pause().stop().destroy()
+        }
     }
 
     @Test fun `first empty delivery waits and later geometry keeps camera mode`() {
